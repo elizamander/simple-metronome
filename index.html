@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Metronome</title>
+  <style>
+    :root {
+      --cream:       #F3EDE3;
+      --sage-light:  #DCE8D5;
+      --sky-light:   #D5E4EE;
+      --earth:       #8A7460;
+      --sage:        #6E9B7E;
+      --text:        #3A332C;
+      --text-dim:    #8A7D72;
+      --panel-bg:    rgba(255,255,255,0.28);
+      --panel-bdr:   rgba(58,51,44,0.10);
+      --dot-off:     #C4BAB0;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
+      color: var(--text);
+      user-select: none;
+      overflow: hidden;
+      position: relative;
+      background: var(--cream);
+    }
+
+    /* Static layered gradient background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 70% at 18% 55%, var(--sage-light) 0%, transparent 65%),
+        radial-gradient(ellipse 70% 60% at 82% 28%, var(--sky-light)  0%, transparent 60%),
+        radial-gradient(ellipse 60% 50% at 55% 85%, #EDE4D6          0%, transparent 55%);
+      z-index: 0;
+    }
+
+    /* ── Animated pulse overlays ── */
+    .pulse-layer {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0;
+      transform-origin: 50% 48%;
+      will-change: opacity, transform;
+    }
+
+    .pulse-l1 {
+      background: radial-gradient(ellipse 64% 58% at 50% 48%,
+        rgba(138, 116, 96, 0.26) 0%, transparent 70%);
+    }
+
+    .pulse-lb {
+      background: radial-gradient(ellipse 58% 52% at 50% 48%,
+        rgba(110, 155, 126, 0.20) 0%, transparent 70%);
+    }
+
+    /*
+      Beat 1: rapid peak → bloom → fade → contract/gather → anticipation glow
+      Phrasing: anticipation is baked into the tail so it lines up with the
+      next beat when animation-duration == one beat duration.
+    */
+    @keyframes pulse-1 {
+      0%   { opacity: 0.90; transform: scale(1.000); }  /* peak */
+      7%   { opacity: 0.60; transform: scale(1.040); }  /* bloom follow-through */
+      22%  { opacity: 0.12; transform: scale(1.000); }  /* fade */
+      52%  { opacity: 0.00; transform: scale(0.960); }  /* contract / gather */
+      80%  { opacity: 0.00; transform: scale(0.970); }  /* still gathering */
+      90%  { opacity: 0.10; transform: scale(1.000); }  /* anticipation rising */
+      96%  { opacity: 0.20; transform: scale(1.012); }  /* anticipation peak */
+      100% { opacity: 0.00; transform: scale(1.000); }  /* silent – next beat fires */
+    }
+
+    @keyframes pulse-b {
+      0%   { opacity: 0.58; transform: scale(1.000); }
+      7%   { opacity: 0.38; transform: scale(1.028); }
+      22%  { opacity: 0.07; transform: scale(1.000); }
+      52%  { opacity: 0.00; transform: scale(0.974); }
+      80%  { opacity: 0.00; transform: scale(0.980); }
+      90%  { opacity: 0.06; transform: scale(1.000); }
+      96%  { opacity: 0.12; transform: scale(1.006); }
+      100% { opacity: 0.00; transform: scale(1.000); }
+    }
+
+    /* ── Layout ── */
+    .container {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.8rem;
+      width: 100%;
+      max-width: 460px;
+    }
+
+    /* ── BPM ── */
+    .bpm-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.3rem;
+    }
+
+    .bpm-label {
+      font-size: 0.7rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+
+    #bpmDisplay {
+      font-size: clamp(5rem, 18vw, 8rem);
+      font-weight: 200;
+      letter-spacing: -0.02em;
+      line-height: 1;
+      cursor: pointer;
+      transition: color 0.15s;
+    }
+    #bpmDisplay:hover { color: var(--earth); }
+    #bpmDisplay.hidden { display: none; }
+
+    #bpmInput {
+      font-size: clamp(5rem, 18vw, 8rem);
+      font-weight: 200;
+      letter-spacing: -0.02em;
+      line-height: 1;
+      width: 4ch;
+      text-align: center;
+      border: none;
+      border-bottom: 2px solid var(--earth);
+      background: transparent;
+      color: var(--text);
+      font-family: inherit;
+      outline: none;
+      display: none;
+    }
+    #bpmInput.active { display: block; }
+
+    .bpm-status {
+      font-size: 0.68rem;
+      color: var(--text-dim);
+      height: 1em;
+      letter-spacing: 0.06em;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .bpm-status.show { opacity: 1; }
+
+    /* ── Slider ── */
+    #tempoSlider {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 3px;
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+      background: linear-gradient(
+        to right,
+        var(--earth) var(--fill, 40%),
+        var(--dot-off) var(--fill, 40%)
+      );
+    }
+    #tempoSlider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 17px;
+      height: 17px;
+      border-radius: 50%;
+      background: var(--earth);
+      cursor: pointer;
+      transition: transform 0.1s;
+    }
+    #tempoSlider::-webkit-slider-thumb:hover { transform: scale(1.25); }
+
+    /* ── Control panels ── */
+    .panels {
+      display: flex;
+      gap: 0.9rem;
+      width: 100%;
+    }
+
+    .panel {
+      flex: 1;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-bdr);
+      border-radius: 14px;
+      padding: 0.8rem 0.9rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.55rem;
+      backdrop-filter: blur(6px);
+    }
+
+    .panel-label {
+      font-size: 0.62rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+    }
+
+    .chip {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.28rem 0.62rem;
+      border-radius: 20px;
+      border: 1px solid var(--panel-bdr);
+      background: transparent;
+      font-size: 0.78rem;
+      color: var(--text);
+      cursor: pointer;
+      font-family: inherit;
+      transition: background 0.12s, color 0.12s, border-color 0.12s, opacity 0.15s;
+      white-space: nowrap;
+    }
+    .chip:hover:not(.faded) { background: rgba(58,51,44,0.07); }
+    .chip.on {
+      background: var(--earth);
+      border-color: var(--earth);
+      color: #fff;
+    }
+
+    /* ── Time signature stacked chips ── */
+    .tsig-chip {
+      flex-direction: column;
+      gap: 0;
+      padding: 0.15rem 0.65rem;
+    }
+    .tsig-chip .n {
+      display: block;
+      font-size: 0.92rem;
+      font-weight: 700;
+      line-height: 1.1;
+      letter-spacing: -0.01em;
+      text-align: center;
+    }
+
+    /* ── Note icon chips ── */
+    .note-chip {
+      min-width: 2.5rem;
+      padding: 0.35rem 0.7rem;
+    }
+    .note-chip svg { display: block; }
+
+    /* ── Swing chip ── */
+    .swing-chip {
+      width: 100%;
+      margin-top: 0.05rem;
+      gap: 0.32rem;
+      font-style: italic;
+      letter-spacing: 0.04em;
+      font-size: 0.75rem;
+    }
+    .swing-chip.faded {
+      opacity: 0.32;
+      cursor: not-allowed;
+    }
+
+    /* Time sig custom entry */
+    .tsig-custom {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      margin-top: 0.1rem;
+    }
+    .tsig-num {
+      width: 2.4rem;
+      text-align: center;
+      border: 1px solid var(--panel-bdr);
+      border-radius: 7px;
+      padding: 0.22rem 0.2rem;
+      background: transparent;
+      font-family: inherit;
+      font-size: 0.82rem;
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .tsig-num:focus { border-color: var(--earth); }
+    .tsig-sep { color: var(--text-dim); font-size: 1rem; line-height: 1; }
+
+    /* ── Beat dots ── */
+    .beat-dots {
+      display: flex;
+      gap: 0.8rem;
+      align-items: center;
+      min-height: 1.4rem;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--dot-off);
+      transition: background 0.04s, transform 0.04s;
+    }
+    .dot.lit    { background: var(--sage);  transform: scale(1.45); }
+    .dot.lit.d1 { background: var(--earth); transform: scale(1.7);  }
+
+    /* ── Start / stop ── */
+    #startBtn {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      border: 2px solid var(--earth);
+      background: transparent;
+      color: var(--earth);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.18s, color 0.18s;
+    }
+    #startBtn:hover,
+    #startBtn.playing { background: var(--earth); color: #fff; }
+    #startBtn svg { width: 22px; height: 22px; }
+
+    /* ── Keyboard hint ── */
+    .hint {
+      font-size: 0.62rem;
+      color: var(--text-dim);
+      text-align: center;
+      opacity: 0.55;
+      letter-spacing: 0.03em;
+    }
+    kbd {
+      font-family: inherit;
+      background: rgba(58,51,44,0.09);
+      border-radius: 3px;
+      padding: 0.08em 0.32em;
+    }
+
+    /* ── Downbeat flash — bright peripheral cue ── */
+    .flash-layer {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0;
+      background: radial-gradient(ellipse 120% 110% at 50% 48%,
+        rgba(255,252,245,0.92) 0%, transparent 72%);
+      will-change: opacity;
+    }
+
+    @keyframes flash-down {
+      0%   { opacity: 1; }
+      14%  { opacity: 0.15; }
+      28%  { opacity: 0; }
+      100% { opacity: 0; }
+    }
+
+    /* ── Active profile name ── */
+    .active-profile-name {
+      font-size: 0.7rem;
+      color: var(--earth);
+      letter-spacing: 0.04em;
+      font-style: italic;
+      height: 1em;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .active-profile-name.show { opacity: 1; }
+
+    /* ── Profiles ── */
+    .profiles-wrap {
+      position: absolute;
+      top: 0;
+      right: 0;
+    }
+
+    .profiles-panel {
+      position: absolute;
+      top: calc(100% + 0.5rem);
+      right: 0;
+      width: 230px;
+      background: rgba(243,237,227,0.96);
+      border: 1px solid var(--panel-bdr);
+      border-radius: 14px;
+      backdrop-filter: blur(8px);
+      padding: 0.7rem 0.8rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(6px);
+      transition: opacity 0.14s, transform 0.14s;
+      z-index: 10;
+    }
+    .profiles-wrap.open .profiles-panel {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    .profile-name-input {
+      display: none;
+      width: 100%;
+      border: none;
+      border-bottom: 1.5px solid var(--earth);
+      background: transparent;
+      font-family: inherit;
+      font-size: 0.8rem;
+      color: var(--text);
+      outline: none;
+      padding: 0.15rem 0;
+    }
+
+    .profile-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .profile-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.4rem;
+    }
+    .profile-load-btn {
+      flex: 1;
+      text-align: left;
+      background: transparent;
+      border: none;
+      font-family: inherit;
+      font-size: 0.78rem;
+      color: var(--text);
+      cursor: pointer;
+      padding: 0.2rem 0.3rem;
+      border-radius: 6px;
+      transition: background 0.1s;
+    }
+    .profile-load-btn:hover { background: rgba(58,51,44,0.07); }
+
+    .profile-delete-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 0.85rem;
+      line-height: 1;
+      padding: 0.1rem 0.3rem;
+      border-radius: 4px;
+      transition: color 0.1s;
+    }
+    .profile-delete-btn:hover { color: var(--text); }
+
+    .profile-empty {
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      text-align: center;
+      padding: 0.4rem 0;
+    }
+
+    .profiles-btn {
+      font-size: 0.7rem;
+      padding: 0.22rem 0.55rem;
+      gap: 0.3rem;
+      opacity: 0.6;
+      transition: opacity 0.15s, background 0.12s, color 0.12s, border-color 0.12s;
+    }
+    .profiles-btn:hover { opacity: 1; }
+  </style>
+</head>
+<body>
+
+  <div class="pulse-layer pulse-l1" id="pulseOne"></div>
+  <div class="pulse-layer pulse-lb" id="pulseBeat"></div>
+  <div class="flash-layer" id="flashDown"></div>
+
+  <div class="container">
+
+    <div class="profiles-wrap" id="profilesWrap">
+      <div class="profiles-panel" id="profilesPanel">
+        <div class="profiles-save-row" id="profilesSaveRow">
+          <button class="chip profiles-add-btn" id="profilesAddBtn">+ Save current</button>
+          <input id="profileNameInput" class="profile-name-input" type="text"
+                 placeholder="Name this profile…" autocomplete="off">
+        </div>
+        <div id="profileList" class="profile-list"></div>
+      </div>
+      <button class="chip profiles-btn" id="profilesBtn" title="Profiles (P)">
+        <svg viewBox="0 0 14 18" width="11" height="14" aria-hidden="true">
+          <path d="M2 1h10a1 1 0 0 1 1 1v14l-6-4-6 4V2a1 1 0 0 1 1-1z"
+                fill="none" stroke="currentColor" stroke-width="1.6"
+                stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- BPM -->
+    <div class="bpm-wrap">
+      <div class="bpm-label">Tempo</div>
+      <div id="activeProfileName" class="active-profile-name"></div>
+      <div id="bpmDisplay">120</div>
+      <input id="bpmInput" type="number" min="20" max="300" value="120" autocomplete="off">
+      <div class="bpm-status" id="bpmStatus"></div>
+    </div>
+
+    <!-- Slider -->
+    <input id="tempoSlider" type="range" min="20" max="300" value="120">
+
+    <!-- Beat dots -->
+    <div class="beat-dots" id="beatDots"></div>
+
+    <!-- Start / Stop -->
+    <button id="startBtn" title="Space to start/stop">
+      <svg id="iconPlay"  viewBox="0 0 24 24" fill="currentColor"><polygon points="6,3 20,12 6,21"/></svg>
+      <svg id="iconPause" viewBox="0 0 24 24" fill="currentColor" style="display:none">
+        <rect x="5"  y="4" width="4" height="16"/>
+        <rect x="15" y="4" width="4" height="16"/>
+      </svg>
+    </button>
+
+    <!-- Time sig + Rhythm -->
+    <div class="panels">
+
+      <!-- Time signature: stacked musical numerals, no slash -->
+      <div class="panel">
+        <div class="panel-label">Time</div>
+        <div class="chip-row" id="tsigPresets">
+          <button class="chip tsig-chip"    data-top="2" data-bot="4"><span class="n">2</span><span class="n">4</span></button>
+          <button class="chip tsig-chip"    data-top="3" data-bot="4"><span class="n">3</span><span class="n">4</span></button>
+          <button class="chip tsig-chip on" data-top="4" data-bot="4"><span class="n">4</span><span class="n">4</span></button>
+          <button class="chip tsig-chip"    data-top="5" data-bot="4"><span class="n">5</span><span class="n">4</span></button>
+          <button class="chip tsig-chip"    data-top="6" data-bot="8"><span class="n">6</span><span class="n">8</span></button>
+        </div>
+        <div class="tsig-custom">
+          <input class="tsig-num" id="tsTop" type="number" min="1" max="32" value="4">
+          <span class="tsig-sep">/</span>
+          <input class="tsig-num" id="tsBot" type="number" min="1" max="32" value="4">
+        </div>
+      </div>
+
+      <!-- Rhythm: SVG note icons + swing toggle -->
+      <div class="panel">
+        <div class="panel-label">Rhythm</div>
+        <div class="chip-row" id="rhythmChips">
+
+          <!-- Quarter note (filled head + stem, no flag) -->
+          <button class="chip note-chip on" data-r="quarter" title="Quarter notes">
+            <svg viewBox="0 0 13 24" width="10" height="20" aria-hidden="true">
+              <ellipse cx="5.5" cy="20.5" rx="5.2" ry="3.4" transform="rotate(-18,5.5,20.5)" fill="currentColor"/>
+              <line x1="10.3" y1="18.2" x2="10.3" y2="3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            </svg>
+          </button>
+
+          <!-- Eighth note (one flag) -->
+          <button class="chip note-chip" data-r="eighth" title="Eighth notes">
+            <svg viewBox="0 0 20 24" width="14" height="20" aria-hidden="true">
+              <ellipse cx="5.5" cy="20.5" rx="5.2" ry="3.4" transform="rotate(-18,5.5,20.5)" fill="currentColor"/>
+              <line x1="10.3" y1="18.2" x2="10.3" y2="3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              <path d="M10.3,3.5 C17,6 18.5,12 12,16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            </svg>
+          </button>
+
+          <!-- Sixteenth note (two flags) -->
+          <button class="chip note-chip" data-r="sixteenth" title="Sixteenth notes">
+            <svg viewBox="0 0 20 24" width="14" height="20" aria-hidden="true">
+              <ellipse cx="5.5" cy="20.5" rx="5.2" ry="3.4" transform="rotate(-18,5.5,20.5)" fill="currentColor"/>
+              <line x1="10.3" y1="18.2" x2="10.3" y2="3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              <path d="M10.3,3.5 C17,6 18.5,12 12,16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              <path d="M10.3,8   C17,10.5 18.5,16 12,20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Swing toggle (faded/unavailable on quarter notes) -->
+        <button class="chip swing-chip faded" id="swingChip" title="Toggle swing (S)">
+          <svg viewBox="0 0 22 9" width="16" height="7" aria-hidden="true">
+            <path d="M1,4.5 C4,1 7,8 11,4.5 C15,1 18,8 21,4.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+          </svg>
+          Swing
+        </button>
+      </div>
+    </div>
+
+    <div class="hint">
+      <kbd>Space</kbd> start/stop &nbsp;·&nbsp;
+      <kbd>↑</kbd><kbd>↓</kbd> tempo &nbsp;·&nbsp;
+      <kbd>S</kbd> swing &nbsp;·&nbsp;
+      <kbd>P</kbd> profiles &nbsp;·&nbsp;
+      <kbd>N</kbd> save
+    </div>
+
+  </div>
+
+  <script>
+  // ────────────────────────────────────────────────────────────
+  // STATE
+  // ────────────────────────────────────────────────────────────
+  const S = {
+    playing:       false,
+    tempo:         120,
+    pendingTempo:  null,
+    tsTop:         4,
+    tsBot:         4,
+    pendingTop:    null,
+    pendingBot:    null,
+    rhythm:        'quarter',
+    pendingRhythm: null,
+    swing:           false,
+    pendingSwing:    null,
+    liveBeat:        -1,
+    liveSubdiv:      -1,
+    activeProfileId: null,
+  };
+
+  const SWING_RATIO = 2 / 3;  // long portion of each swung pair (triplet feel)
+
+  // ────────────────────────────────────────────────────────────
+  // DOM CACHE  (grab once at startup, reuse everywhere)
+  // ────────────────────────────────────────────────────────────
+  const elPulseOne    = document.getElementById('pulseOne');
+  const elPulseBeat   = document.getElementById('pulseBeat');
+  const elBeatDots    = document.getElementById('beatDots');
+  const elStartBtn    = document.getElementById('startBtn');
+  const elIconPlay    = document.getElementById('iconPlay');
+  const elIconPause   = document.getElementById('iconPause');
+  const elBpmDisplay  = document.getElementById('bpmDisplay');
+  const elBpmInput    = document.getElementById('bpmInput');
+  const elBpmStatus   = document.getElementById('bpmStatus');
+  const elTempoSlider = document.getElementById('tempoSlider');
+  const elSwingChip       = document.getElementById('swingChip');
+  const elTsigPresets     = document.getElementById('tsigPresets');
+  const elTsTop           = document.getElementById('tsTop');
+  const elTsBot           = document.getElementById('tsBot');
+  const elRhythmChips     = document.getElementById('rhythmChips');
+  const elFlashDown         = document.getElementById('flashDown');
+  const elProfilesWrap      = document.getElementById('profilesWrap');
+  const elProfilesAddBtn    = document.getElementById('profilesAddBtn');
+  const elProfileNameInput  = document.getElementById('profileNameInput');
+  const elProfileList       = document.getElementById('profileList');
+  const elProfilesBtn       = document.getElementById('profilesBtn');
+  const elActiveProfileName = document.getElementById('activeProfileName');
+
+  // ────────────────────────────────────────────────────────────
+  // AUDIO ENGINE
+  // ────────────────────────────────────────────────────────────
+  let wakeLock    = null;
+
+  let ctx         = null;
+  let nextTime    = 0;
+  let schedBeat   = 0;
+  let schedSub    = 0;
+  let schedTimer  = null;
+  let noiseBuffer = null;
+
+  const LOOKAHEAD  = 25;    // ms between scheduler runs
+  const LOOK_AHEAD = 0.10;  // seconds of audio to schedule ahead
+
+  function initAudio() {
+    if (!ctx) {
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      noiseBuffer = bakeNoise();
+    }
+    if (ctx.state === 'suspended') ctx.resume();
+  }
+
+  function bakeNoise() {
+    const len = Math.floor(ctx.sampleRate * 0.2);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d   = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    return buf;
+  }
+
+  function subdivs() {
+    return S.rhythm === 'quarter' ? 1 : S.rhythm === 'eighth' ? 2 : 4;
+  }
+
+  // Duration in seconds for subdivision index `sub`.
+  // With swing: even subdivisions are long (2/3), odd are short (1/3).
+  function secsForSubdiv(sub) {
+    const beat = 60 / S.tempo;
+    const n = subdivs();
+    if (n === 1 || !S.swing) return beat / n;
+    // Two subdivisions fill one "virtual beat slot" = 2*beat/n
+    const pairDur = (2 * beat) / n;
+    return (sub % 2 === 0) ? pairDur * SWING_RATIO : pairDur * (1 - SWING_RATIO);
+  }
+
+  function playThud(t, type) {
+    const g = type === 'down' ? 0.92 : type === 'beat' ? 0.58 : 0.26;
+
+    // Low sine that pitches down – the "body" of the thud
+    const osc    = ctx.createOscillator();
+    const oscEnv = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(type === 'down' ? 95 : 68, t);
+    osc.frequency.exponentialRampToValueAtTime(32, t + 0.14);
+    oscEnv.gain.setValueAtTime(g * 0.78, t);
+    oscEnv.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+    osc.connect(oscEnv);
+    oscEnv.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.25);
+
+    // Lowpass noise burst – the "pipe" texture
+    const noise    = ctx.createBufferSource();
+    noise.buffer   = noiseBuffer;
+    const lpf      = ctx.createBiquadFilter();
+    lpf.type       = 'lowpass';
+    lpf.frequency.value = type === 'down' ? 200 : 140;
+    lpf.Q.value    = 0.4;
+    const noiseEnv = ctx.createGain();
+    noiseEnv.gain.setValueAtTime(g * 0.5, t);
+    noiseEnv.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+    noise.connect(lpf);
+    lpf.connect(noiseEnv);
+    noiseEnv.connect(ctx.destination);
+    noise.start(t);
+    noise.stop(t + 0.08);
+  }
+
+  function scheduleNote(beat, sub, t) {
+    const isDown   = beat === 0 && sub === 0;
+    const isOnBeat = sub === 0;
+    const type     = isDown ? 'down' : isOnBeat ? 'beat' : 'sub';
+    const beatDur  = 60 / S.tempo;
+    playThud(t, type);
+
+    const delay = Math.max(0, (t - ctx.currentTime) * 1000);
+    setTimeout(() => triggerVisual(beat, sub, type, beatDur), delay);
+  }
+
+  function advanceClock() {
+    const dur  = secsForSubdiv(schedSub);   // duration of the note we just scheduled
+    const subs = subdivs();
+    schedSub++;
+    if (schedSub >= subs) {
+      schedSub = 0;
+      schedBeat++;
+      if (schedBeat >= S.tsTop) {
+        schedBeat = 0;
+        applyPending();
+      }
+    }
+    nextTime += dur;
+  }
+
+  function applyPending() {
+    let changed = false;
+    if (S.pendingTempo !== null)  { S.tempo  = S.pendingTempo;  S.pendingTempo  = null; syncTempoUI(); changed = true; }
+    if (S.pendingTop   !== null)  { S.tsTop  = S.pendingTop;    S.pendingTop    = null; changed = true; }
+    if (S.pendingBot   !== null)  { S.tsBot  = S.pendingBot;    S.pendingBot    = null; changed = true; }
+    if (S.pendingRhythm !== null) { S.rhythm = S.pendingRhythm; S.pendingRhythm = null; changed = true; }
+    if (S.pendingSwing  !== null) { S.swing  = S.pendingSwing;  S.pendingSwing  = null; changed = true; }
+    if (changed) buildDots();
+  }
+
+  function runScheduler() {
+    while (nextTime < ctx.currentTime + LOOK_AHEAD) {
+      scheduleNote(schedBeat, schedSub, nextTime);
+      advanceClock();
+    }
+    schedTimer = setTimeout(runScheduler, LOOKAHEAD);
+  }
+
+  async function requestWakeLock() {
+    if (!('wakeLock' in navigator)) return;
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+    } catch (err) {
+      // Silently fail — e.g. battery saver mode may block this
+    }
+  }
+
+  function releaseWakeLock() {
+    if (wakeLock) { wakeLock.release(); wakeLock = null; }
+  }
+
+  // Wake locks are dropped when the tab is hidden; re-acquire on return
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && S.playing) requestWakeLock();
+  });
+
+  function start() {
+    initAudio();
+    S.playing = true;
+    schedBeat = 0;
+    schedSub  = 0;
+    nextTime  = ctx.currentTime + 0.05;
+    runScheduler();
+    updatePlayBtn();
+    requestWakeLock();
+  }
+
+  function stop() {
+    S.playing    = false;
+    S.liveBeat   = -1;
+    S.liveSubdiv = -1;
+    clearTimeout(schedTimer);
+    schedTimer = null;
+    buildDots();
+    updatePlayBtn();
+    elPulseOne.style.animation  = 'none';
+    elPulseBeat.style.animation = 'none';
+    releaseWakeLock();
+  }
+
+  function toggle() { S.playing ? stop() : start(); }
+
+  // ────────────────────────────────────────────────────────────
+  // VISUALS
+  // ────────────────────────────────────────────────────────────
+
+  // Restart a CSS keyframe animation on demand, using reflow trick.
+  function firePulse(el, keyframeName, beatDur) {
+    el.style.animation = 'none';
+    el.offsetWidth;   // force reflow so removal is committed before re-add
+    el.style.animation = `${keyframeName} ${beatDur.toFixed(3)}s linear 1 forwards`;
+  }
+
+  function triggerVisual(beat, sub, type, beatDur) {
+    S.liveBeat   = beat;
+    S.liveSubdiv = sub;
+    litDots();
+
+    // Only pulse the background on beat onsets (not on subdivisions)
+    if (sub === 0) {
+      if (type === 'down') {
+        firePulse(elPulseOne,  'pulse-1',    beatDur);
+        firePulse(elFlashDown, 'flash-down', beatDur);
+      } else {
+        firePulse(elPulseBeat, 'pulse-b', beatDur);
+      }
+    }
+  }
+
+  function buildDots() {
+    const n = S.tsTop;
+    if (elBeatDots.children.length !== n) {
+      elBeatDots.innerHTML = '';
+      for (let i = 0; i < n; i++) {
+        const d = document.createElement('div');
+        d.className = 'dot' + (i === 0 ? ' d1' : '');
+        elBeatDots.appendChild(d);
+      }
+    }
+    litDots();
+  }
+
+  function litDots() {
+    for (let i = 0; i < elBeatDots.children.length; i++) {
+      const on = S.playing && i === S.liveBeat && S.liveSubdiv === 0;
+      elBeatDots.children[i].classList.toggle('lit', on);
+    }
+  }
+
+  function updatePlayBtn() {
+    elStartBtn.classList.toggle('playing', S.playing);
+    elIconPlay.style.display  = S.playing ? 'none'  : 'block';
+    elIconPause.style.display = S.playing ? 'block' : 'none';
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // TEMPO
+  // ────────────────────────────────────────────────────────────
+  function clampTempo(v) { return Math.max(20, Math.min(300, v)); }
+
+  function commitTempo(v) {
+    clearActiveProfile();
+    v = clampTempo(v);
+    if (S.playing) {
+      S.pendingTempo = v;
+      showStatus('on next measure → ' + v);
+    } else {
+      S.tempo        = v;
+      S.pendingTempo = null;
+      syncTempoUI();
+      hideStatus();
+    }
+    updateSlider(v);
+    if (!elBpmInput.classList.contains('active')) {
+      elBpmDisplay.textContent = v;
+    }
+  }
+
+  function syncTempoUI() {
+    elBpmDisplay.textContent = S.tempo;
+    elBpmInput.value         = S.tempo;
+    updateSlider(S.tempo);
+    hideStatus();
+  }
+
+  function updateSlider(v) {
+    elTempoSlider.value = v;
+    elTempoSlider.style.setProperty('--fill', ((v - 20) / 280 * 100).toFixed(1) + '%');
+  }
+
+  function showStatus(msg) {
+    elBpmStatus.textContent = msg;
+    elBpmStatus.classList.add('show');
+  }
+  function hideStatus() {
+    elBpmStatus.classList.remove('show');
+  }
+
+  elBpmDisplay.addEventListener('click', () => {
+    elBpmDisplay.classList.add('hidden');
+    elBpmInput.classList.add('active');
+    elBpmInput.value = S.pendingTempo ?? S.tempo;
+    elBpmInput.select();
+  });
+
+  elBpmInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const v = parseInt(elBpmInput.value);
+      if (!isNaN(v)) commitTempo(v);
+      closeBPMInput();
+    } else if (e.key === 'Escape') {
+      closeBPMInput();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      elBpmInput.value = clampTempo((parseInt(elBpmInput.value) || S.tempo) + 1);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      elBpmInput.value = clampTempo((parseInt(elBpmInput.value) || S.tempo) - 1);
+    }
+  });
+
+  elBpmInput.addEventListener('blur', () => closeBPMInput());
+
+  function closeBPMInput() {
+    elBpmInput.classList.remove('active');
+    elBpmDisplay.classList.remove('hidden');
+    elBpmDisplay.textContent = S.pendingTempo ?? S.tempo;
+  }
+
+  elTempoSlider.addEventListener('input', function () {
+    const v = parseInt(this.value);
+    this.style.setProperty('--fill', ((v - 20) / 280 * 100).toFixed(1) + '%');
+    commitTempo(v);
+  });
+
+  // ────────────────────────────────────────────────────────────
+  // TIME SIGNATURE
+  // ────────────────────────────────────────────────────────────
+  const VALID_BOTS = [1, 2, 4, 8, 16, 32];
+
+  function snapBot(v) {
+    return VALID_BOTS.reduce((p, c) => Math.abs(c - v) < Math.abs(p - v) ? c : p);
+  }
+
+  function commitTimeSig(top, bot) {
+    clearActiveProfile();
+    top = Math.max(1, Math.min(32, top));
+    bot = snapBot(Math.max(1, Math.min(32, bot)));
+
+    elTsTop.value = top;
+    elTsBot.value = bot;
+
+    elTsigPresets.querySelectorAll('.chip').forEach(b => {
+      b.classList.toggle('on',
+        parseInt(b.dataset.top) === top && parseInt(b.dataset.bot) === bot);
+    });
+
+    if (S.playing) {
+      S.pendingTop = top;
+      S.pendingBot = bot;
+    } else {
+      S.tsTop = top;
+      S.tsBot = bot;
+      buildDots();
+    }
+  }
+
+  elTsigPresets.addEventListener('click', e => {
+    const b = e.target.closest('.chip');
+    if (b) commitTimeSig(parseInt(b.dataset.top), parseInt(b.dataset.bot));
+  });
+
+  elTsTop.addEventListener('change', function () {
+    commitTimeSig(parseInt(this.value) || S.tsTop, S.pendingBot ?? S.tsBot);
+  });
+  elTsBot.addEventListener('change', function () {
+    commitTimeSig(S.pendingTop ?? S.tsTop, parseInt(this.value) || S.tsBot);
+  });
+
+  // ────────────────────────────────────────────────────────────
+  // RHYTHM
+  // ────────────────────────────────────────────────────────────
+  function commitRhythm(r) {
+    clearActiveProfile();
+    elRhythmChips.querySelectorAll('.chip').forEach(b => {
+      b.classList.toggle('on', b.dataset.r === r);
+    });
+    // Swing has no effect on quarter notes – show that visually
+    elSwingChip.classList.toggle('faded', r === 'quarter');
+
+    if (S.playing) {
+      S.pendingRhythm = r;
+    } else {
+      S.rhythm = r;
+    }
+  }
+
+  elRhythmChips.addEventListener('click', e => {
+    const b = e.target.closest('.chip');
+    if (b) commitRhythm(b.dataset.r);
+  });
+
+  // ────────────────────────────────────────────────────────────
+  // SWING
+  // ────────────────────────────────────────────────────────────
+  function toggleSwing() {
+    clearActiveProfile();
+    const currentRhythm = S.pendingRhythm ?? S.rhythm;
+    if (currentRhythm === 'quarter') return;
+
+    const next = !(S.pendingSwing ?? S.swing);
+    elSwingChip.classList.toggle('on', next);
+
+    if (S.playing) {
+      S.pendingSwing = next;
+    } else {
+      S.swing = next;
+    }
+  }
+
+  elSwingChip.addEventListener('click', toggleSwing);
+
+  // ────────────────────────────────────────────────────────────
+  // PROFILES
+  // ────────────────────────────────────────────────────────────
+  const PROFILES_KEY = 'metronome-profiles';
+
+  function clearActiveProfile() {
+    S.activeProfileId = null;
+    elActiveProfileName.textContent = '';
+    elActiveProfileName.classList.remove('show');
+  }
+
+  function syncActiveProfileName() {
+    if (S.activeProfileId === null) return;
+    const p = loadProfiles().find(x => x.id === S.activeProfileId);
+    if (!p) { clearActiveProfile(); return; }
+    elActiveProfileName.textContent = p.name;
+    elActiveProfileName.classList.add('show');
+  }
+
+  function loadProfiles() {
+    try { return JSON.parse(localStorage.getItem(PROFILES_KEY) || '[]'); }
+    catch { return []; }
+  }
+
+  function saveProfiles(arr) {
+    localStorage.setItem(PROFILES_KEY, JSON.stringify(arr));
+  }
+
+  function defaultProfileName() {
+    const sym = { quarter: '♩', eighth: '♪', sixteenth: '♬' };
+    const swing = S.swing ? ' swing' : '';
+    return `${S.tempo} · ${S.tsTop}/${S.tsBot} · ${sym[S.rhythm]}${swing}`;
+  }
+
+  function renderProfileList() {
+    const profiles = loadProfiles();
+    if (profiles.length === 0) {
+      elProfileList.innerHTML = '<div class="profile-empty">No saved profiles yet.</div>';
+      return;
+    }
+    elProfileList.innerHTML = '';
+    profiles.forEach(p => {
+      const row = document.createElement('div');
+      row.className = 'profile-item';
+      const loadBtn = document.createElement('button');
+      loadBtn.className = 'profile-load-btn';
+      loadBtn.textContent = p.name;
+      loadBtn.title = `${p.tempo} BPM · ${p.tsTop}/${p.tsBot} · ${p.rhythm}${p.swing ? ' · swing' : ''}`;
+      loadBtn.addEventListener('click', () => applyProfile(p));
+      const delBtn = document.createElement('button');
+      delBtn.className = 'profile-delete-btn';
+      delBtn.textContent = '×';
+      delBtn.title = 'Delete';
+      delBtn.addEventListener('click', () => {
+        saveProfiles(loadProfiles().filter(x => x.id !== p.id));
+        if (S.activeProfileId === p.id) clearActiveProfile();
+        renderProfileList();
+      });
+      row.append(loadBtn, delBtn);
+      elProfileList.appendChild(row);
+    });
+  }
+
+  function applyProfile(profile) {
+    commitTempo(profile.tempo);
+    commitTimeSig(profile.tsTop, profile.tsBot);
+    commitRhythm(profile.rhythm);
+    if (S.playing) {
+      S.pendingSwing = profile.swing;
+    } else {
+      S.swing = profile.swing;
+    }
+    elSwingChip.classList.toggle('on', profile.swing);
+    elSwingChip.classList.toggle('faded', profile.rhythm === 'quarter');
+    S.activeProfileId = profile.id;
+    syncActiveProfileName();
+    closeProfilesPanel();
+    if (!S.playing) start();
+  }
+
+  function startProfileSave() {
+    openProfilesPanel();
+    elProfilesAddBtn.style.display = 'none';
+    elProfileNameInput.style.display = 'block';
+    elProfileNameInput.value = defaultProfileName();
+    elProfileNameInput.select();
+    elProfileNameInput.focus();
+  }
+
+  function confirmProfileSave() {
+    const name = elProfileNameInput.value.trim() || defaultProfileName();
+    const profiles = loadProfiles();
+    const newProfile = { id: Date.now(), name, tempo: S.tempo, tsTop: S.tsTop,
+                         tsBot: S.tsBot, rhythm: S.rhythm, swing: S.swing };
+    profiles.unshift(newProfile);
+    saveProfiles(profiles);
+    S.activeProfileId = newProfile.id;
+    syncActiveProfileName();
+    cancelProfileSave();
+    renderProfileList();
+  }
+
+  function cancelProfileSave() {
+    elProfileNameInput.style.display = 'none';
+    elProfileNameInput.value = '';
+    elProfilesAddBtn.style.display = '';
+  }
+
+  function openProfilesPanel() {
+    elProfilesWrap.classList.add('open');
+    renderProfileList();
+  }
+
+  function closeProfilesPanel() {
+    elProfilesWrap.classList.remove('open');
+    cancelProfileSave();
+  }
+
+  function toggleProfilesPanel() {
+    if (elProfilesWrap.classList.contains('open')) closeProfilesPanel();
+    else openProfilesPanel();
+  }
+
+  document.addEventListener('click', e => {
+    if (!elProfilesWrap.contains(e.target)) closeProfilesPanel();
+  });
+
+  elProfilesAddBtn.addEventListener('click', startProfileSave);
+  elProfilesBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    toggleProfilesPanel();
+  });
+
+  elProfileNameInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); confirmProfileSave(); }
+    else if (e.key === 'Escape') { cancelProfileSave(); }
+  });
+
+  // ────────────────────────────────────────────────────────────
+  // START / STOP BUTTON + KEYBOARD
+  // ────────────────────────────────────────────────────────────
+  elStartBtn.addEventListener('click', toggle);
+
+  document.addEventListener('keydown', e => {
+    const inInput = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName);
+    if (inInput) return;
+
+    if (e.key === ' ') {
+      e.preventDefault();
+      toggle();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      commitTempo((S.pendingTempo ?? S.tempo) + 1);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      commitTempo((S.pendingTempo ?? S.tempo) - 1);
+    } else if (e.key === 's' || e.key === 'S') {
+      toggleSwing();
+    } else if (e.key === 'p' || e.key === 'P') {
+      toggleProfilesPanel();
+    } else if (e.key === 'n' || e.key === 'N') {
+      e.preventDefault();
+      startProfileSave();
+    }
+  });
+
+  // ────────────────────────────────────────────────────────────
+  // INIT
+  // ────────────────────────────────────────────────────────────
+  buildDots();
+  updateSlider(S.tempo);
+  renderProfileList();
+  </script>
+</body>
+</html>
