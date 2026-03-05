@@ -767,7 +767,7 @@
     if (S.pendingBot   !== null)  { S.tsBot  = S.pendingBot;    S.pendingBot    = null; changed = true; }
     if (S.pendingRhythm !== null) { S.rhythm = S.pendingRhythm; S.pendingRhythm = null; changed = true; }
     if (S.pendingSwing  !== null) { S.swing  = S.pendingSwing;  S.pendingSwing  = null; changed = true; }
-    if (changed) buildDots();
+    if (changed) { buildDots(); hideStatus(); }
   }
 
   function runScheduler() {
@@ -885,7 +885,7 @@
     v = clampTempo(v);
     if (S.playing) {
       S.pendingTempo = v;
-      showStatus('on next measure → ' + v);
+      showPendingStatus();
     } else {
       S.tempo        = v;
       S.pendingTempo = null;
@@ -916,6 +916,18 @@
   }
   function hideStatus() {
     elBpmStatus.classList.remove('show');
+  }
+
+  function showPendingStatus() {
+    const sym = { quarter: '♩', eighth: '♪', sixteenth: '♬' };
+    const parts = [];
+    if (S.pendingTempo !== null) parts.push(S.pendingTempo + ' bpm');
+    if (S.pendingTop !== null || S.pendingBot !== null) {
+      parts.push((S.pendingTop ?? S.tsTop) + '/' + (S.pendingBot ?? S.tsBot));
+    }
+    if (S.pendingRhythm !== null) parts.push(sym[S.pendingRhythm]);
+    if (S.pendingSwing  !== null) parts.push(S.pendingSwing ? 'swing' : 'no swing');
+    if (parts.length) showStatus('on next measure \u2192 ' + parts.join(' \xb7 '));
   }
 
   elBpmDisplay.addEventListener('click', () => {
@@ -981,6 +993,7 @@
     if (S.playing) {
       S.pendingTop = top;
       S.pendingBot = bot;
+      showPendingStatus();
     } else {
       S.tsTop = top;
       S.tsBot = bot;
@@ -1013,6 +1026,7 @@
 
     if (S.playing) {
       S.pendingRhythm = r;
+      showPendingStatus();
     } else {
       S.rhythm = r;
     }
@@ -1036,6 +1050,7 @@
 
     if (S.playing) {
       S.pendingSwing = next;
+      showPendingStatus();
     } else {
       S.swing = next;
     }
