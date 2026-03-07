@@ -113,6 +113,7 @@
       flex-direction: column;
       align-items: center;
       gap: 0.3rem;
+      width: 100%;
     }
 
     .bpm-label {
@@ -377,6 +378,10 @@
       height: 1em;
       opacity: 0;
       transition: opacity 0.2s;
+      max-width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .active-profile-name.show { opacity: 1; }
 
@@ -497,6 +502,46 @@
       transition: opacity 0.15s, background 0.12s, color 0.12s, border-color 0.12s;
     }
     .profiles-btn:hover { opacity: 1; }
+
+    /* ── Mobile adjustments ── */
+    @media (max-width: 480px) {
+      .profiles-panel {
+        position: fixed;
+        top: auto;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
+        border-radius: 14px 14px 0 0;
+        max-height: 60vh;
+        overflow-y: auto;
+        opacity: 1;
+        pointer-events: none;
+        visibility: hidden;
+        transform: translateY(100%);
+        transition: transform 0.25s ease-out, visibility 0s 0.25s;
+      }
+      .profiles-wrap.open .profiles-panel {
+        transform: translateY(0);
+        pointer-events: auto;
+        visibility: visible;
+        transition: transform 0.25s ease-out;
+      }
+
+      .profile-action-btn {
+        padding: 0.4rem 0.45rem;
+        font-size: 1rem;
+      }
+
+      .bpm-status {
+        max-width: 90vw;
+        text-align: center;
+      }
+
+      .hint {
+        display: none;
+      }
+    }
   </style>
 </head>
 <body>
