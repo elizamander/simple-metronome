@@ -391,7 +391,7 @@
       position: absolute;
       top: calc(100% + 0.5rem);
       right: 0;
-      width: 230px;
+      width: 280px;
       background: rgba(243,237,227,0.96);
       border: 1px solid var(--panel-bdr);
       border-radius: 14px;
@@ -440,6 +440,7 @@
     }
     .profile-load-btn {
       flex: 1;
+      min-width: 0;
       text-align: left;
       background: transparent;
       border: none;
@@ -450,10 +451,13 @@
       padding: 0.2rem 0.3rem;
       border-radius: 6px;
       transition: background 0.1s;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .profile-load-btn:hover { background: rgba(58,51,44,0.07); }
 
-    .profile-delete-btn {
+    .profile-action-btn {
       background: transparent;
       border: none;
       color: var(--text-dim);
@@ -464,7 +468,19 @@
       border-radius: 4px;
       transition: color 0.1s;
     }
-    .profile-delete-btn:hover { color: var(--text); }
+    .profile-action-btn:hover { color: var(--text); }
+
+    .profile-rename-input {
+      flex: 1;
+      border: none;
+      border-bottom: 1.5px solid var(--earth);
+      background: transparent;
+      font-family: inherit;
+      font-size: 0.78rem;
+      color: var(--text);
+      outline: none;
+      padding: 0.2rem 0.3rem;
+    }
 
     .profile-empty {
       font-size: 0.72rem;
@@ -1107,8 +1123,68 @@
       loadBtn.textContent = p.name;
       loadBtn.title = `${p.tempo} BPM · ${p.tsTop}/${p.tsBot} · ${p.rhythm}${p.swing ? ' · swing' : ''}`;
       loadBtn.addEventListener('click', () => applyProfile(p));
+      const renameBtn = document.createElement('button');
+      renameBtn.className = 'profile-action-btn';
+      renameBtn.textContent = '✎';
+      renameBtn.title = 'Rename';
+      renameBtn.addEventListener('click', () => {
+        const input = document.createElement('input');
+        input.className = 'profile-rename-input';
+        input.type = 'text';
+        input.value = p.name;
+        input.autocomplete = 'off';
+        row.replaceChild(input, loadBtn);
+        input.select();
+        input.focus();
+        const commit = () => {
+          const newName = input.value.trim();
+          if (newName && newName !== p.name) {
+            const profiles = loadProfiles();
+            const prof = profiles.find(x => x.id === p.id);
+            if (prof) {
+              prof.name = newName;
+              saveProfiles(profiles);
+              if (S.activeProfileId === p.id) syncActiveProfileName();
+            }
+          }
+          renderProfileList();
+        };
+        input.addEventListener('keydown', e => {
+          if (e.key === 'Enter') { e.preventDefault(); commit(); }
+          else if (e.key === 'Escape') { renderProfileList(); }
+        });
+        input.addEventListener('blur', commit);
+      });
+      const updateBtn = document.createElement('button');
+      updateBtn.className = 'profile-action-btn';
+      updateBtn.textContent = '↻';
+      updateBtn.title = 'Update with current settings';
+      updateBtn.addEventListener('click', () => {
+        const profiles = loadProfiles();
+        const idx = profiles.findIndex(x => x.id === p.id);
+        if (idx !== -1) {
+          profiles[idx] = { ...profiles[idx], tempo: S.tempo, tsTop: S.tsTop,
+                            tsBot: S.tsBot, rhythm: S.rhythm, swing: S.swing };
+          saveProfiles(profiles);
+          S.activeProfileId = p.id;
+          syncActiveProfileName();
+          renderProfileList();
+        }
+      });
+      const dupBtn = document.createElement('button');
+      dupBtn.className = 'profile-action-btn';
+      dupBtn.textContent = '⧉';
+      dupBtn.title = 'Duplicate';
+      dupBtn.addEventListener('click', () => {
+        const profiles = loadProfiles();
+        const copy = { ...p, id: Date.now(), name: p.name + ' (copy)' };
+        const idx = profiles.findIndex(x => x.id === p.id);
+        profiles.splice(idx + 1, 0, copy);
+        saveProfiles(profiles);
+        renderProfileList();
+      });
       const delBtn = document.createElement('button');
-      delBtn.className = 'profile-delete-btn';
+      delBtn.className = 'profile-action-btn';
       delBtn.textContent = '×';
       delBtn.title = 'Delete';
       delBtn.addEventListener('click', () => {
@@ -1116,7 +1192,7 @@
         if (S.activeProfileId === p.id) clearActiveProfile();
         renderProfileList();
       });
-      row.append(loadBtn, delBtn);
+      row.append(loadBtn, renameBtn, updateBtn, dupBtn, delBtn);
       elProfileList.appendChild(row);
     });
   }
