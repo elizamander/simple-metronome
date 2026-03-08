@@ -721,8 +721,7 @@
 
   let ctx         = null;
   let nextTime    = 0;
-  let schedBeat   = 0;
-  let schedSub    = 0;
+  let schedStep   = 0;
   let schedTimer  = null;
   let noiseBuffer = null;
 
@@ -749,15 +748,22 @@
     return S.rhythm === 'quarter' ? 1 : S.rhythm === 'eighth' ? 2 : 4;
   }
 
-  // Duration in seconds for subdivision index `sub`.
-  // With swing: even subdivisions are long (2/3), odd are short (1/3).
-  function secsForSubdiv(sub) {
-    const beat = 60 / S.tempo;
+  function totalSteps() {
+    return S.mode === 'sequencer' ? S.stepCount : S.tsTop * subdivs();
+  }
+
+  function beatFromStep(step) {
+    const subs = subdivs();
+    return { beat: Math.floor(step / subs), sub: step % subs };
+  }
+
+  function stepDuration(step) {
+    const beatSec = 60 / S.tempo;
     const n = subdivs();
-    if (n === 1 || !S.swing) return beat / n;
-    // Two subdivisions fill one "virtual beat slot" = 2*beat/n
-    const pairDur = (2 * beat) / n;
-    return (sub % 2 === 0) ? pairDur * SWING_RATIO : pairDur * (1 - SWING_RATIO);
+    if (S.mode === 'sequencer') return (beatSec * S.tsTop) / S.stepCount;
+    if (n === 1 || !S.swing) return beatSec / n;
+    const pairDur = (2 * beatSec) / n;
+    return (step % 2 === 0) ? pairDur * SWING_RATIO : pairDur * (1 - SWING_RATIO);
   }
 
   function playThud(t, type) {
@@ -794,7 +800,13 @@
     noise.stop(t + (type === 'down' ? 0.06 : 0.08));
   }
 
-  function scheduleNote(beat, sub, t) {
+  function scheduleNote(step, t) {
+    if (S.mode === 'sequencer') {
+      // placeholder for pattern grid lookup
+      return;
+    }
+
+    const { beat, sub } = beatFromStep(step);
     const isDown   = beat === 0 && sub === 0;
     const isOnBeat = sub === 0;
     const type     = isDown ? 'down' : isOnBeat ? 'beat' : 'sub';
@@ -806,18 +818,12 @@
   }
 
   function advanceClock() {
-    const dur  = secsForSubdiv(schedSub);   // duration of the note we just scheduled
-    const subs = subdivs();
-    schedSub++;
-    if (schedSub >= subs) {
-      schedSub = 0;
-      schedBeat++;
-      if (schedBeat >= S.tsTop) {
-        schedBeat = 0;
-        applyPending();
-      }
+    nextTime += stepDuration(schedStep);
+    schedStep++;
+    if (schedStep >= totalSteps()) {
+      schedStep = 0;
+      applyPending();
     }
-    nextTime += dur;
   }
 
   function commitParam(key, value, uiSync) {
@@ -843,7 +849,7 @@
 
   function runScheduler() {
     while (nextTime < ctx.currentTime + LOOK_AHEAD) {
-      scheduleNote(schedBeat, schedSub, nextTime);
+      scheduleNote(schedStep, nextTime);
       advanceClock();
     }
     schedTimer = setTimeout(runScheduler, LOOKAHEAD);
@@ -872,8 +878,7 @@
     updatePlayBtn();
     await initAudio();
     if (!S.playing) return;
-    schedBeat = 0;
-    schedSub  = 0;
+    schedStep = 0;
     nextTime  = ctx.currentTime + 0.05;
     runScheduler();
     requestWakeLock();
