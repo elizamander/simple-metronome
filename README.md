@@ -11,8 +11,7 @@ Also: an experiment in building with Claude Code.
 ## Design
 - Tempo is the most obvious thing on screen at all times
 - When the metronome is running, there is movement — the background gradient pulses with the beat
-- Pleasing and calming, like walking through a meadow but abstract, not graphical
-- Not like walking into an Apple Store. Not like a lava lamp.
+- Calming and abstract, but not like an Apple Store and not like a lava lamp. More like cloud-watching in an empty meadow while a DJ plays beats in your ear. 
 - Beat 1 always sounds and looks different — you always know where you are in the measure
 
 ## Features
