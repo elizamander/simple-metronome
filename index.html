@@ -674,18 +674,16 @@
   const S = {
     playing:       false,
     tempo:         120,
-    pendingTempo:  null,
     tsTop:         4,
     tsBot:         4,
-    pendingTop:    null,
-    pendingBot:    null,
     rhythm:        'quarter',
-    pendingRhythm: null,
-    swing:           false,
-    pendingSwing:    null,
-    liveBeat:        -1,
-    liveSubdiv:      -1,
+    swing:         false,
+    liveBeat:      -1,
+    liveSubdiv:    -1,
     activeProfileId: null,
+    mode:          'metronome',
+    stepCount:     16,
+    pending:       null,
   };
 
   const SWING_RATIO = 2 / 3;  // long portion of each swung pair (triplet feel)
@@ -822,14 +820,25 @@
     nextTime += dur;
   }
 
+  function commitParam(key, value, uiSync) {
+    if (S.playing) {
+      if (!S.pending) S.pending = {};
+      S.pending[key] = value;
+      showPendingStatus();
+    } else {
+      S[key] = value;
+      S.pending = null;
+      if (uiSync) uiSync();
+    }
+  }
+
   function applyPending() {
-    let changed = false;
-    if (S.pendingTempo !== null)  { S.tempo  = S.pendingTempo;  S.pendingTempo  = null; syncTempoUI(); changed = true; }
-    if (S.pendingTop   !== null)  { S.tsTop  = S.pendingTop;    S.pendingTop    = null; changed = true; }
-    if (S.pendingBot   !== null)  { S.tsBot  = S.pendingBot;    S.pendingBot    = null; changed = true; }
-    if (S.pendingRhythm !== null) { S.rhythm = S.pendingRhythm; S.pendingRhythm = null; changed = true; }
-    if (S.pendingSwing  !== null) { S.swing  = S.pendingSwing;  S.pendingSwing  = null; changed = true; }
-    if (changed) { buildDots(); hideStatus(); }
+    if (!S.pending) return;
+    Object.assign(S, S.pending);
+    S.pending = null;
+    buildDots();
+    syncTempoUI();
+    hideStatus();
   }
 
   function runScheduler() {
@@ -947,15 +956,7 @@
   function commitTempo(v) {
     clearActiveProfile();
     v = clampTempo(v);
-    if (S.playing) {
-      S.pendingTempo = v;
-      showPendingStatus();
-    } else {
-      S.tempo        = v;
-      S.pendingTempo = null;
-      syncTempoUI();
-      hideStatus();
-    }
+    commitParam('tempo', v, syncTempoUI);
     updateSlider(v);
     if (!elBpmInput.classList.contains('active')) {
       elBpmDisplay.textContent = v;
@@ -983,21 +984,22 @@
   }
 
   function showPendingStatus() {
+    if (!S.pending) { hideStatus(); return; }
     const sym = { quarter: '♩', eighth: '♪', sixteenth: '♬' };
     const parts = [];
-    if (S.pendingTempo !== null) parts.push(S.pendingTempo + ' bpm');
-    if (S.pendingTop !== null || S.pendingBot !== null) {
-      parts.push((S.pendingTop ?? S.tsTop) + '/' + (S.pendingBot ?? S.tsBot));
+    if (S.pending.tempo != null) parts.push(S.pending.tempo + ' bpm');
+    if (S.pending.tsTop != null || S.pending.tsBot != null) {
+      parts.push((S.pending.tsTop ?? S.tsTop) + '/' + (S.pending.tsBot ?? S.tsBot));
     }
-    if (S.pendingRhythm !== null) parts.push(sym[S.pendingRhythm]);
-    if (S.pendingSwing  !== null) parts.push(S.pendingSwing ? 'swing' : 'no swing');
-    if (parts.length) showStatus('on next measure \u2192 ' + parts.join(' \xb7 '));
+    if (S.pending.rhythm != null) parts.push(sym[S.pending.rhythm]);
+    if (S.pending.swing != null) parts.push(S.pending.swing ? 'swing' : 'no swing');
+    if (parts.length) showStatus('on next measure → ' + parts.join(' · '));
   }
 
   elBpmDisplay.addEventListener('click', () => {
     elBpmDisplay.classList.add('hidden');
     elBpmInput.classList.add('active');
-    elBpmInput.value = S.pendingTempo ?? S.tempo;
+    elBpmInput.value = (S.pending && S.pending.tempo) ?? S.tempo;
     elBpmInput.select();
   });
 
@@ -1023,7 +1025,7 @@
   function closeBPMInput() {
     elBpmInput.classList.remove('active');
     elBpmDisplay.classList.remove('hidden');
-    elBpmDisplay.textContent = S.pendingTempo ?? S.tempo;
+    elBpmDisplay.textContent = (S.pending && S.pending.tempo) ?? S.tempo;
   }
 
   elTempoSlider.addEventListener('input', function () {
@@ -1054,17 +1056,8 @@
         parseInt(b.dataset.top) === top && parseInt(b.dataset.bot) === bot);
     });
 
-    if (S.playing) {
-      S.pendingTop = top;
-      S.pendingBot = bot;
-      showPendingStatus();
-    } else {
-      S.tsTop = top;
-      S.tsBot = bot;
-      S.pendingTop = null;
-      S.pendingBot = null;
-      buildDots();
-    }
+    commitParam('tsTop', top, buildDots);
+    commitParam('tsBot', bot);
   }
 
   elTsigPresets.addEventListener('click', e => {
@@ -1073,10 +1066,10 @@
   });
 
   elTsTop.addEventListener('change', function () {
-    commitTimeSig(parseInt(this.value) || S.tsTop, S.pendingBot ?? S.tsBot);
+    commitTimeSig(parseInt(this.value) || S.tsTop, (S.pending && S.pending.tsBot) ?? S.tsBot);
   });
   elTsBot.addEventListener('change', function () {
-    commitTimeSig(S.pendingTop ?? S.tsTop, parseInt(this.value) || S.tsBot);
+    commitTimeSig((S.pending && S.pending.tsTop) ?? S.tsTop, parseInt(this.value) || S.tsBot);
   });
 
   // ────────────────────────────────────────────────────────────
@@ -1087,16 +1080,8 @@
     elRhythmChips.querySelectorAll('.chip').forEach(b => {
       b.classList.toggle('on', b.dataset.r === r);
     });
-    // Swing has no effect on quarter notes – show that visually
     elSwingChip.classList.toggle('faded', r === 'quarter');
-
-    if (S.playing) {
-      S.pendingRhythm = r;
-      showPendingStatus();
-    } else {
-      S.rhythm = r;
-      S.pendingRhythm = null;
-    }
+    commitParam('rhythm', r);
   }
 
   elRhythmChips.addEventListener('click', e => {
@@ -1109,19 +1094,12 @@
   // ────────────────────────────────────────────────────────────
   function toggleSwing() {
     clearActiveProfile();
-    const currentRhythm = S.pendingRhythm ?? S.rhythm;
+    const currentRhythm = (S.pending && S.pending.rhythm) ?? S.rhythm;
     if (currentRhythm === 'quarter') return;
 
-    const next = !(S.pendingSwing ?? S.swing);
+    const next = !((S.pending && S.pending.swing) ?? S.swing);
     elSwingChip.classList.toggle('on', next);
-
-    if (S.playing) {
-      S.pendingSwing = next;
-      showPendingStatus();
-    } else {
-      S.swing = next;
-      S.pendingSwing = null;
-    }
+    commitParam('swing', next);
   }
 
   elSwingChip.addEventListener('click', toggleSwing);
@@ -1253,12 +1231,7 @@
     commitTempo(profile.tempo);
     commitTimeSig(profile.tsTop, profile.tsBot);
     commitRhythm(profile.rhythm);
-    if (S.playing) {
-      S.pendingSwing = profile.swing;
-    } else {
-      S.swing = profile.swing;
-      S.pendingSwing = null;
-    }
+    commitParam('swing', profile.swing);
     elSwingChip.classList.toggle('on', profile.swing);
     elSwingChip.classList.toggle('faded', profile.rhythm === 'quarter');
     S.activeProfileId = profile.id;
@@ -1339,10 +1312,10 @@
       toggle();
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      commitTempo((S.pendingTempo ?? S.tempo) + 1);
+      commitTempo(((S.pending && S.pending.tempo) ?? S.tempo) + 1);
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
-      commitTempo((S.pendingTempo ?? S.tempo) - 1);
+      commitTempo(((S.pending && S.pending.tempo) ?? S.tempo) - 1);
     } else if (e.key === 's' || e.key === 'S') {
       toggleSwing();
     } else if (e.key === 'p' || e.key === 'P') {
