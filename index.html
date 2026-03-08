@@ -736,7 +736,7 @@
       ctx = new (window.AudioContext || window.webkitAudioContext)();
       noiseBuffer = bakeNoise();
     }
-    if (ctx.state === 'suspended') ctx.resume();
+    if (ctx.state === 'suspended') return ctx.resume();
   }
 
   function bakeNoise() {
@@ -769,7 +769,7 @@
     const osc    = ctx.createOscillator();
     const oscEnv = ctx.createGain();
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(type === 'down' ? 95 : 68, t);
+    osc.frequency.setValueAtTime(type === 'down' ? 140 : 68, t);
     osc.frequency.exponentialRampToValueAtTime(32, t + 0.14);
     oscEnv.gain.setValueAtTime(g * 0.78, t);
     oscEnv.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
@@ -783,16 +783,17 @@
     noise.buffer   = noiseBuffer;
     const lpf      = ctx.createBiquadFilter();
     lpf.type       = 'lowpass';
-    lpf.frequency.value = type === 'down' ? 200 : 140;
+    lpf.frequency.value = type === 'down' ? 600 : 140;
     lpf.Q.value    = 0.4;
     const noiseEnv = ctx.createGain();
+    const noiseDur = type === 'down' ? 0.03 : 0.05;
     noiseEnv.gain.setValueAtTime(g * 0.5, t);
-    noiseEnv.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+    noiseEnv.gain.exponentialRampToValueAtTime(0.0001, t + noiseDur);
     noise.connect(lpf);
     lpf.connect(noiseEnv);
     noiseEnv.connect(ctx.destination);
     noise.start(t);
-    noise.stop(t + 0.08);
+    noise.stop(t + (type === 'down' ? 0.06 : 0.08));
   }
 
   function scheduleNote(beat, sub, t) {
@@ -857,18 +858,20 @@
     if (document.visibilityState === 'visible' && S.playing) requestWakeLock();
   });
 
-  function start() {
-    initAudio();
+  async function start() {
     S.playing = true;
+    updatePlayBtn();
+    await initAudio();
+    if (!S.playing) return;
     schedBeat = 0;
     schedSub  = 0;
     nextTime  = ctx.currentTime + 0.05;
     runScheduler();
-    updatePlayBtn();
     requestWakeLock();
   }
 
   function stop() {
+    applyPending();
     S.playing    = false;
     S.liveBeat   = -1;
     S.liveSubdiv = -1;
@@ -1058,6 +1061,8 @@
     } else {
       S.tsTop = top;
       S.tsBot = bot;
+      S.pendingTop = null;
+      S.pendingBot = null;
       buildDots();
     }
   }
@@ -1090,6 +1095,7 @@
       showPendingStatus();
     } else {
       S.rhythm = r;
+      S.pendingRhythm = null;
     }
   }
 
@@ -1114,6 +1120,7 @@
       showPendingStatus();
     } else {
       S.swing = next;
+      S.pendingSwing = null;
     }
   }
 
@@ -1250,6 +1257,7 @@
       S.pendingSwing = profile.swing;
     } else {
       S.swing = profile.swing;
+      S.pendingSwing = null;
     }
     elSwingChip.classList.toggle('on', profile.swing);
     elSwingChip.classList.toggle('faded', profile.rhythm === 'quarter');
