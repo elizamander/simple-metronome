@@ -40,6 +40,12 @@ Also: an experiment in building with Claude Code.
 - Beat 1 (the downbeat) carries more weight — slightly louder and at a higher starting frequency
 - Subdivisions are noticeably quieter so the beat structure stays clear
 
+### Song Profiles
+- Save the current tempo, time signature, rhythm, and swing as a named profile
+- Loading a profile while stopped applies all settings and starts the metronome; loading while playing queues the changes to take effect at the next measure boundary
+- Profiles can be renamed, updated with new settings, duplicated, and deleted
+- The active profile name is displayed while a profile is loaded; any manual change clears it
+
 ### Visual
 - A row of dots shows your position in the measure; beat 1 is a distinct color
 - The background pulses on each beat with a keyframe animation: rapid peak on impact, brief bloom, then a slow gather and anticipation glow before the next beat
@@ -53,6 +59,7 @@ Also: an experiment in building with Claude Code.
 | Click tempo | Edit tempo by typing |
 | `Enter` | Confirm typed tempo |
 | `Escape` | Cancel tempo edit |
+| `P` | Open / close profiles panel |
 
 ## Architecture
 A single `index.html` file with embedded CSS and JavaScript. No frameworks, no build step, no network requests. The audio is generated entirely by the browser's Web Audio API.
