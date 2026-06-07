@@ -359,6 +359,20 @@
     .seq-cell:nth-child(4n):not(:last-child) {
       margin-right: 8px;
     }
+    @media (max-width: 600px) {
+      .seq-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+        max-width: 280px;
+      }
+      .seq-cell {
+        max-width: none;
+      }
+      .seq-cell:nth-child(4n):not(:last-child) {
+        margin-right: 0;
+      }
+    }
 
     /* ── Start / stop ── */
     #startBtn {
