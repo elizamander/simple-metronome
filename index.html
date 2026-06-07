@@ -1422,6 +1422,7 @@
       S.pattern = profile.pattern.slice();
       litSeqCells();
     }
+    if (S.playing) applyPending();
     S.activeProfileId = profile.id;
     syncActiveProfileName();
     closeProfilesPanel();
