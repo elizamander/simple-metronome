@@ -796,6 +796,7 @@
   const elActiveProfileName = document.getElementById('activeProfileName');
   const elModeSwitch = document.getElementById('modeSwitch');
   const elContainer  = document.querySelector('.container');
+  const elSeqGrid = document.getElementById('seqGrid');
 
   // ────────────────────────────────────────────────────────────
   // AUDIO ENGINE
@@ -1044,6 +1045,25 @@
     for (let i = 0; i < elBeatDots.children.length; i++) {
       const on = S.playing && i === S.liveBeat && S.liveSubdiv === 0;
       elBeatDots.children[i].classList.toggle('lit', on);
+    }
+  }
+
+  function buildSeqGrid() {
+    if (elSeqGrid.children.length !== S.stepCount) {
+      elSeqGrid.innerHTML = '';
+      for (let i = 0; i < S.stepCount; i++) {
+        const c = document.createElement('button');
+        c.className = 'seq-cell';
+        c.dataset.step = i;
+        elSeqGrid.appendChild(c);
+      }
+    }
+    litSeqCells();
+  }
+
+  function litSeqCells() {
+    for (let i = 0; i < elSeqGrid.children.length; i++) {
+      elSeqGrid.children[i].classList.toggle('on', !!S.pattern[i]);
     }
   }
 
@@ -1441,6 +1461,7 @@
   // ────────────────────────────────────────────────────────────
   elContainer.setAttribute('data-mode', S.mode);
   buildDots();
+  buildSeqGrid();
   updateSlider(S.tempo);
   renderProfileList();
   </script>
