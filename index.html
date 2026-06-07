@@ -1390,12 +1390,18 @@
   }
 
   function applyProfile(profile) {
+    const targetMode = profile.mode || 'metronome';
+    commitMode(targetMode);
     commitTempo(profile.tempo);
     commitTimeSig(profile.tsTop, profile.tsBot);
     commitRhythm(profile.rhythm);
     commitParam('swing', profile.swing);
     elSwingChip.classList.toggle('on', profile.swing);
     elSwingChip.classList.toggle('faded', profile.rhythm === 'quarter');
+    if (targetMode === 'sequencer' && Array.isArray(profile.pattern)) {
+      S.pattern = profile.pattern.slice();
+      litSeqCells();
+    }
     S.activeProfileId = profile.id;
     syncActiveProfileName();
     closeProfilesPanel();
