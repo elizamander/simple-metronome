@@ -317,6 +317,49 @@
     .dot.lit    { background: var(--sage);  transform: scale(1.45); }
     .dot.lit.d1 { background: var(--earth); transform: scale(1.7);  }
 
+    .seq-grid {
+      display: flex;
+      gap: 4px;
+      margin: 1.4rem 0 1.8rem;
+      width: 100%;
+      max-width: 560px;
+      justify-content: center;
+    }
+    .seq-cell {
+      flex: 1;
+      aspect-ratio: 1 / 1;
+      max-width: 30px;
+      min-width: 0;
+      border: 1.5px solid var(--panel-bdr);
+      border-radius: 6px;
+      background: var(--panel-bg);
+      cursor: pointer;
+      padding: 0;
+      position: relative;
+      transition: background 0.08s, border-color 0.08s;
+    }
+    .seq-cell:hover { border-color: var(--text-dim); }
+    .seq-cell.on::after {
+      content: '';
+      position: absolute;
+      top: 50%; left: 50%;
+      width: 38%; height: 38%;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: var(--sage);
+    }
+    .seq-cell.lit {
+      background: var(--earth);
+      border-color: var(--earth);
+    }
+    .seq-cell.on.lit::after {
+      background: var(--cream);
+    }
+    /* Subtle gap every 4 cells to mark beat boundaries (desktop) */
+    .seq-cell:nth-child(4n):not(:last-child) {
+      margin-right: 8px;
+    }
+
     /* ── Start / stop ── */
     #startBtn {
       width: 60px;
@@ -619,6 +662,7 @@
 
     <!-- Beat dots -->
     <div class="beat-dots" id="beatDots"></div>
+    <div class="seq-grid" id="seqGrid"></div>
 
     <!-- Start / Stop -->
     <button id="startBtn" title="Space to start/stop">
