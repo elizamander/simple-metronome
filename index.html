@@ -503,6 +503,33 @@
     }
     .profiles-btn:hover { opacity: 1; }
 
+    .mode-switch {
+      display: flex;
+      gap: 2px;
+      padding: 3px;
+      border-radius: 999px;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-bdr);
+      margin-bottom: 1.5rem;
+    }
+    .mode-btn {
+      flex: 1;
+      padding: 0.4rem 1.1rem;
+      border: none;
+      background: transparent;
+      color: var(--text-dim);
+      font: inherit;
+      font-size: 0.85rem;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .mode-btn:hover { color: var(--text); }
+    .mode-btn.on {
+      background: var(--earth);
+      color: #fff;
+    }
+
     /* ── Mobile adjustments ── */
     @media (max-width: 480px) {
       .profiles-panel {
@@ -551,6 +578,11 @@
   <div class="flash-layer" id="flashDown"></div>
 
   <div class="container">
+
+    <div class="mode-switch" id="modeSwitch">
+      <button class="mode-btn on" data-mode="metronome">Metronome</button>
+      <button class="mode-btn"    data-mode="sequencer">Sequencer</button>
+    </div>
 
     <div class="profiles-wrap" id="profilesWrap">
       <div class="profiles-panel" id="profilesPanel">
