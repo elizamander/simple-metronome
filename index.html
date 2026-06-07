@@ -529,6 +529,9 @@
       background: var(--earth);
       color: #fff;
     }
+    .container[data-mode="metronome"] .seq-grid { display: none; }
+    .container[data-mode="sequencer"] .panels,
+    .container[data-mode="sequencer"] .beat-dots { display: none; }
 
     /* ── Mobile adjustments ── */
     @media (max-width: 480px) {
