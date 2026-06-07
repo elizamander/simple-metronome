@@ -1354,7 +1354,9 @@
         const idx = profiles.findIndex(x => x.id === p.id);
         if (idx !== -1) {
           profiles[idx] = { ...profiles[idx], tempo: S.tempo, tsTop: S.tsTop,
-                            tsBot: S.tsBot, rhythm: S.rhythm, swing: S.swing };
+                            tsBot: S.tsBot, rhythm: S.rhythm, swing: S.swing,
+                            mode: S.mode, stepCount: S.stepCount,
+                            pattern: S.pattern.slice() };
           saveProfiles(profiles);
           S.activeProfileId = p.id;
           syncActiveProfileName();
@@ -1413,7 +1415,9 @@
     const name = elProfileNameInput.value.trim() || defaultProfileName();
     const profiles = loadProfiles();
     const newProfile = { id: Date.now(), name, tempo: S.tempo, tsTop: S.tsTop,
-                         tsBot: S.tsBot, rhythm: S.rhythm, swing: S.swing };
+                         tsBot: S.tsBot, rhythm: S.rhythm, swing: S.swing,
+                         mode: S.mode, stepCount: S.stepCount,
+                         pattern: S.pattern.slice() };
     profiles.unshift(newProfile);
     saveProfiles(profiles);
     S.activeProfileId = newProfile.id;
