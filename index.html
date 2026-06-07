@@ -1417,6 +1417,15 @@
     if (b) commitMode(b.dataset.mode);
   });
 
+  elSeqGrid.addEventListener('click', e => {
+    const c = e.target.closest('.seq-cell');
+    if (!c) return;
+    const step = parseInt(c.dataset.step);
+    S.pattern[step] = !S.pattern[step];
+    c.classList.toggle('on', S.pattern[step]);
+    clearActiveProfile();
+  });
+
   elProfilesAddBtn.addEventListener('click', startProfileSave);
   elProfilesBtn.addEventListener('click', e => {
     e.stopPropagation();
