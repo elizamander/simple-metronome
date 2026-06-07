@@ -747,6 +747,8 @@
   const elProfileList       = document.getElementById('profileList');
   const elProfilesBtn       = document.getElementById('profilesBtn');
   const elActiveProfileName = document.getElementById('activeProfileName');
+  const elModeSwitch = document.getElementById('modeSwitch');
+  const elContainer  = document.querySelector('.container');
 
   // ────────────────────────────────────────────────────────────
   // AUDIO ENGINE
@@ -869,6 +871,23 @@
       S[key] = value;
       S.pending = null;
       if (uiSync) uiSync();
+    }
+  }
+
+  function commitMode(mode) {
+    if (mode === S.mode) return;
+    clearActiveProfile();
+    if (S.playing) {
+      applyPending();
+    }
+    S.mode = mode;
+    elContainer.setAttribute('data-mode', mode);
+    elModeSwitch.querySelectorAll('.mode-btn').forEach(b => {
+      b.classList.toggle('on', b.dataset.mode === mode);
+    });
+    if (S.playing) {
+      schedStep = 0;
+      nextTime  = ctx.currentTime + 0.05;
     }
   }
 
@@ -1326,6 +1345,11 @@
     if (!elProfilesWrap.contains(e.target)) closeProfilesPanel();
   });
 
+  elModeSwitch.addEventListener('click', e => {
+    const b = e.target.closest('.mode-btn');
+    if (b) commitMode(b.dataset.mode);
+  });
+
   elProfilesAddBtn.addEventListener('click', startProfileSave);
   elProfilesBtn.addEventListener('click', e => {
     e.stopPropagation();
@@ -1368,6 +1392,7 @@
   // ────────────────────────────────────────────────────────────
   // INIT
   // ────────────────────────────────────────────────────────────
+  elContainer.setAttribute('data-mode', S.mode);
   buildDots();
   updateSlider(S.tempo);
   renderProfileList();
