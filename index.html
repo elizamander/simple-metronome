@@ -518,6 +518,20 @@
       text-overflow: ellipsis;
     }
     .profile-load-btn:hover { background: rgba(58,51,44,0.07); }
+    .profile-mode-badge {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      line-height: 14px;
+      text-align: center;
+      font-size: 9px;
+      font-weight: 600;
+      color: var(--text-dim);
+      border: 1px solid var(--panel-bdr);
+      border-radius: 3px;
+      margin-right: 8px;
+      vertical-align: 1px;
+    }
 
     .profile-action-btn {
       background: transparent;
@@ -1293,6 +1307,9 @@
   }
 
   function defaultProfileName() {
+    if (S.mode === 'sequencer') {
+      return `${S.tempo} · seq`;
+    }
     const sym = { quarter: '♩', eighth: '♪', sixteenth: '♬' };
     const swing = S.swing ? ' swing' : '';
     return `${S.tempo} · ${S.tsTop}/${S.tsBot} · ${sym[S.rhythm]}${swing}`;
@@ -1310,7 +1327,10 @@
       row.className = 'profile-item';
       const loadBtn = document.createElement('button');
       loadBtn.className = 'profile-load-btn';
-      loadBtn.textContent = p.name;
+      const badge = document.createElement('span');
+      badge.className = 'profile-mode-badge';
+      badge.textContent = p.mode === 'sequencer' ? 'S' : 'M';
+      loadBtn.append(badge, p.name);
       loadBtn.title = `${p.tempo} BPM · ${p.tsTop}/${p.tsBot} · ${p.rhythm}${p.swing ? ' · swing' : ''}`;
       loadBtn.addEventListener('click', () => applyProfile(p));
       const renameBtn = document.createElement('button');
