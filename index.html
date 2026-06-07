@@ -886,7 +886,10 @@
 
   function scheduleNote(step, t) {
     if (S.mode === 'sequencer') {
-      // placeholder for pattern grid lookup
+      if (!S.pattern[step]) return;
+      playThud(t, 'beat');
+      const delay = Math.max(0, (t - ctx.currentTime) * 1000);
+      setTimeout(() => triggerSeqVisual(step), delay);
       return;
     }
 
@@ -930,6 +933,7 @@
     }
     S.mode = mode;
     elContainer.setAttribute('data-mode', mode);
+    clearSeqLit();
     elModeSwitch.querySelectorAll('.mode-btn').forEach(b => {
       b.classList.toggle('on', b.dataset.mode === mode);
     });
@@ -993,6 +997,7 @@
     clearTimeout(schedTimer);
     schedTimer = null;
     buildDots();
+    clearSeqLit();
     updatePlayBtn();
     elPulseOne.style.animation  = 'none';
     elPulseBeat.style.animation = 'none';
@@ -1026,6 +1031,22 @@
         firePulse(elPulseBeat, 'pulse-b', beatDur);
       }
     }
+  }
+
+  let litSeqCellIdx = -1;
+  function triggerSeqVisual(step) {
+    if (litSeqCellIdx !== -1 && elSeqGrid.children[litSeqCellIdx]) {
+      elSeqGrid.children[litSeqCellIdx].classList.remove('lit');
+    }
+    elSeqGrid.children[step].classList.add('lit');
+    litSeqCellIdx = step;
+  }
+
+  function clearSeqLit() {
+    if (litSeqCellIdx !== -1 && elSeqGrid.children[litSeqCellIdx]) {
+      elSeqGrid.children[litSeqCellIdx].classList.remove('lit');
+    }
+    litSeqCellIdx = -1;
   }
 
   function buildDots() {
