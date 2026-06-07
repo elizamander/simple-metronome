@@ -317,6 +317,63 @@
     .dot.lit    { background: var(--sage);  transform: scale(1.45); }
     .dot.lit.d1 { background: var(--earth); transform: scale(1.7);  }
 
+    .seq-grid {
+      display: flex;
+      gap: 4px;
+      margin: 1.4rem 0 1.8rem;
+      width: 100%;
+      max-width: 560px;
+      justify-content: center;
+    }
+    .seq-cell {
+      flex: 1;
+      aspect-ratio: 1 / 1;
+      max-width: 30px;
+      min-width: 0;
+      border: 1.5px solid var(--panel-bdr);
+      border-radius: 6px;
+      background: var(--panel-bg);
+      cursor: pointer;
+      padding: 0;
+      position: relative;
+      transition: background 0.08s, border-color 0.08s;
+    }
+    .seq-cell:hover { border-color: var(--text-dim); }
+    .seq-cell.on::after {
+      content: '';
+      position: absolute;
+      top: 50%; left: 50%;
+      width: 38%; height: 38%;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: var(--sage);
+    }
+    .seq-cell.lit {
+      background: var(--earth);
+      border-color: var(--earth);
+    }
+    .seq-cell.on.lit::after {
+      background: var(--cream);
+    }
+    /* Subtle gap every 4 cells to mark beat boundaries (desktop) */
+    .seq-cell:nth-child(4n):not(:last-child) {
+      margin-right: 8px;
+    }
+    @media (max-width: 600px) {
+      .seq-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+        max-width: 280px;
+      }
+      .seq-cell {
+        max-width: none;
+      }
+      .seq-cell:nth-child(4n):not(:last-child) {
+        margin-right: 0;
+      }
+    }
+
     /* ── Start / stop ── */
     #startBtn {
       width: 60px;
@@ -461,6 +518,20 @@
       text-overflow: ellipsis;
     }
     .profile-load-btn:hover { background: rgba(58,51,44,0.07); }
+    .profile-mode-badge {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      line-height: 14px;
+      text-align: center;
+      font-size: 9px;
+      font-weight: 600;
+      color: var(--text-dim);
+      border: 1px solid var(--panel-bdr);
+      border-radius: 3px;
+      margin-right: 8px;
+      vertical-align: 1px;
+    }
 
     .profile-action-btn {
       background: transparent;
@@ -502,6 +573,36 @@
       transition: opacity 0.15s, background 0.12s, color 0.12s, border-color 0.12s;
     }
     .profiles-btn:hover { opacity: 1; }
+
+    .mode-switch {
+      display: flex;
+      gap: 2px;
+      padding: 3px;
+      border-radius: 999px;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-bdr);
+      margin-bottom: 1.5rem;
+    }
+    .mode-btn {
+      flex: 1;
+      padding: 0.4rem 1.1rem;
+      border: none;
+      background: transparent;
+      color: var(--text-dim);
+      font: inherit;
+      font-size: 0.85rem;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .mode-btn:hover { color: var(--text); }
+    .mode-btn.on {
+      background: var(--earth);
+      color: #fff;
+    }
+    .container[data-mode="metronome"] .seq-grid { display: none; }
+    .container[data-mode="sequencer"] .panels,
+    .container[data-mode="sequencer"] .beat-dots { display: none; }
 
     /* ── Mobile adjustments ── */
     @media (max-width: 480px) {
@@ -552,6 +653,11 @@
 
   <div class="container">
 
+    <div class="mode-switch" id="modeSwitch">
+      <button class="mode-btn on" data-mode="metronome">Metronome</button>
+      <button class="mode-btn"    data-mode="sequencer">Sequencer</button>
+    </div>
+
     <div class="profiles-wrap" id="profilesWrap">
       <div class="profiles-panel" id="profilesPanel">
         <div class="profiles-save-row" id="profilesSaveRow">
@@ -584,6 +690,7 @@
 
     <!-- Beat dots -->
     <div class="beat-dots" id="beatDots"></div>
+    <div class="seq-grid" id="seqGrid"></div>
 
     <!-- Start / Stop -->
     <button id="startBtn" title="Space to start/stop">
@@ -684,6 +791,8 @@
     mode:          'metronome',
     stepCount:     16,
     pending:       null,
+    pattern: [true, false, false, false, true, false, false, false,
+              true, false, false, false, true, false, false, false],
   };
 
   const SWING_RATIO = 2 / 3;  // long portion of each swung pair (triplet feel)
@@ -713,6 +822,9 @@
   const elProfileList       = document.getElementById('profileList');
   const elProfilesBtn       = document.getElementById('profilesBtn');
   const elActiveProfileName = document.getElementById('activeProfileName');
+  const elModeSwitch = document.getElementById('modeSwitch');
+  const elContainer  = document.querySelector('.container');
+  const elSeqGrid = document.getElementById('seqGrid');
 
   // ────────────────────────────────────────────────────────────
   // AUDIO ENGINE
@@ -802,7 +914,10 @@
 
   function scheduleNote(step, t) {
     if (S.mode === 'sequencer') {
-      // placeholder for pattern grid lookup
+      if (!S.pattern[step]) return;
+      playThud(t, 'beat');
+      const delay = Math.max(0, (t - ctx.currentTime) * 1000);
+      setTimeout(() => triggerSeqVisual(step), delay);
       return;
     }
 
@@ -835,6 +950,24 @@
       S[key] = value;
       S.pending = null;
       if (uiSync) uiSync();
+    }
+  }
+
+  function commitMode(mode) {
+    if (mode === S.mode) return;
+    clearActiveProfile();
+    if (S.playing) {
+      applyPending();
+    }
+    S.mode = mode;
+    elContainer.setAttribute('data-mode', mode);
+    clearSeqLit();
+    elModeSwitch.querySelectorAll('.mode-btn').forEach(b => {
+      b.classList.toggle('on', b.dataset.mode === mode);
+    });
+    if (S.playing) {
+      schedStep = 0;
+      nextTime  = ctx.currentTime + 0.05;
     }
   }
 
@@ -892,6 +1025,7 @@
     clearTimeout(schedTimer);
     schedTimer = null;
     buildDots();
+    clearSeqLit();
     updatePlayBtn();
     elPulseOne.style.animation  = 'none';
     elPulseBeat.style.animation = 'none';
@@ -927,6 +1061,22 @@
     }
   }
 
+  let litSeqCellIdx = -1;
+  function triggerSeqVisual(step) {
+    if (litSeqCellIdx !== -1 && elSeqGrid.children[litSeqCellIdx]) {
+      elSeqGrid.children[litSeqCellIdx].classList.remove('lit');
+    }
+    elSeqGrid.children[step].classList.add('lit');
+    litSeqCellIdx = step;
+  }
+
+  function clearSeqLit() {
+    if (litSeqCellIdx !== -1 && elSeqGrid.children[litSeqCellIdx]) {
+      elSeqGrid.children[litSeqCellIdx].classList.remove('lit');
+    }
+    litSeqCellIdx = -1;
+  }
+
   function buildDots() {
     const n = S.tsTop;
     if (elBeatDots.children.length !== n) {
@@ -944,6 +1094,25 @@
     for (let i = 0; i < elBeatDots.children.length; i++) {
       const on = S.playing && i === S.liveBeat && S.liveSubdiv === 0;
       elBeatDots.children[i].classList.toggle('lit', on);
+    }
+  }
+
+  function buildSeqGrid() {
+    if (elSeqGrid.children.length !== S.stepCount) {
+      elSeqGrid.innerHTML = '';
+      for (let i = 0; i < S.stepCount; i++) {
+        const c = document.createElement('button');
+        c.className = 'seq-cell';
+        c.dataset.step = i;
+        elSeqGrid.appendChild(c);
+      }
+    }
+    litSeqCells();
+  }
+
+  function litSeqCells() {
+    for (let i = 0; i < elSeqGrid.children.length; i++) {
+      elSeqGrid.children[i].classList.toggle('on', !!S.pattern[i]);
     }
   }
 
@@ -1138,6 +1307,9 @@
   }
 
   function defaultProfileName() {
+    if (S.mode === 'sequencer') {
+      return `${S.tempo} · seq`;
+    }
     const sym = { quarter: '♩', eighth: '♪', sixteenth: '♬' };
     const swing = S.swing ? ' swing' : '';
     return `${S.tempo} · ${S.tsTop}/${S.tsBot} · ${sym[S.rhythm]}${swing}`;
@@ -1155,7 +1327,10 @@
       row.className = 'profile-item';
       const loadBtn = document.createElement('button');
       loadBtn.className = 'profile-load-btn';
-      loadBtn.textContent = p.name;
+      const badge = document.createElement('span');
+      badge.className = 'profile-mode-badge';
+      badge.textContent = p.mode === 'sequencer' ? 'S' : 'M';
+      loadBtn.append(badge, p.name);
       loadBtn.title = `${p.tempo} BPM · ${p.tsTop}/${p.tsBot} · ${p.rhythm}${p.swing ? ' · swing' : ''}`;
       loadBtn.addEventListener('click', () => applyProfile(p));
       const renameBtn = document.createElement('button');
@@ -1199,7 +1374,9 @@
         const idx = profiles.findIndex(x => x.id === p.id);
         if (idx !== -1) {
           profiles[idx] = { ...profiles[idx], tempo: S.tempo, tsTop: S.tsTop,
-                            tsBot: S.tsBot, rhythm: S.rhythm, swing: S.swing };
+                            tsBot: S.tsBot, rhythm: S.rhythm, swing: S.swing,
+                            mode: S.mode, stepCount: S.stepCount,
+                            pattern: S.pattern.slice() };
           saveProfiles(profiles);
           S.activeProfileId = p.id;
           syncActiveProfileName();
@@ -1233,12 +1410,19 @@
   }
 
   function applyProfile(profile) {
+    const targetMode = profile.mode || 'metronome';
+    commitMode(targetMode);
     commitTempo(profile.tempo);
     commitTimeSig(profile.tsTop, profile.tsBot);
     commitRhythm(profile.rhythm);
     commitParam('swing', profile.swing);
     elSwingChip.classList.toggle('on', profile.swing);
     elSwingChip.classList.toggle('faded', profile.rhythm === 'quarter');
+    if (targetMode === 'sequencer' && Array.isArray(profile.pattern)) {
+      S.pattern = profile.pattern.slice();
+      litSeqCells();
+    }
+    if (S.playing) applyPending();
     S.activeProfileId = profile.id;
     syncActiveProfileName();
     closeProfilesPanel();
@@ -1258,7 +1442,9 @@
     const name = elProfileNameInput.value.trim() || defaultProfileName();
     const profiles = loadProfiles();
     const newProfile = { id: Date.now(), name, tempo: S.tempo, tsTop: S.tsTop,
-                         tsBot: S.tsBot, rhythm: S.rhythm, swing: S.swing };
+                         tsBot: S.tsBot, rhythm: S.rhythm, swing: S.swing,
+                         mode: S.mode, stepCount: S.stepCount,
+                         pattern: S.pattern.slice() };
     profiles.unshift(newProfile);
     saveProfiles(profiles);
     S.activeProfileId = newProfile.id;
@@ -1290,6 +1476,20 @@
 
   document.addEventListener('click', e => {
     if (!elProfilesWrap.contains(e.target)) closeProfilesPanel();
+  });
+
+  elModeSwitch.addEventListener('click', e => {
+    const b = e.target.closest('.mode-btn');
+    if (b) commitMode(b.dataset.mode);
+  });
+
+  elSeqGrid.addEventListener('click', e => {
+    const c = e.target.closest('.seq-cell');
+    if (!c) return;
+    const step = parseInt(c.dataset.step);
+    S.pattern[step] = !S.pattern[step];
+    c.classList.toggle('on', S.pattern[step]);
+    clearActiveProfile();
   });
 
   elProfilesAddBtn.addEventListener('click', startProfileSave);
@@ -1334,7 +1534,9 @@
   // ────────────────────────────────────────────────────────────
   // INIT
   // ────────────────────────────────────────────────────────────
+  elContainer.setAttribute('data-mode', S.mode);
   buildDots();
+  buildSeqGrid();
   updateSlider(S.tempo);
   renderProfileList();
   </script>
